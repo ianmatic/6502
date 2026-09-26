@@ -1,0 +1,171 @@
+; $00, $01 store the ball's current position
+; $02, $03 store the ball's previous position
+; $04 is paddle drawing offset
+; $05 is paddle offset counter
+; $10, $11 is P1 position
+; $20, $21 is P2 position
+
+jsr setup
+jmp loop
+
+setup:
+  jsr setupP1
+  jsr setupP2
+  jsr setupBall
+  rts
+
+setupP1:
+  ; $03a2 is the starting point for P1's position
+  lda #$a2
+  sta $10
+  lda #$03
+  sta $11
+  rts
+
+setupP2:
+  ; $03be is the starting point for P1's position
+  lda #$be
+  sta $20
+  lda #$03
+  sta $21
+  rts
+
+setupBall:
+  ; $0410 is the center of the screen
+  lda #$10
+  sta $00
+  lda #$04
+  sta $01
+  rts
+
+loop:
+  jsr stall
+
+  ; Copy current position into $02 and $03
+  ldx $00
+  stx $02
+  ldx $01
+  stx $03
+
+  ; Move ball to the right
+  ldx $00
+  inx
+  stx $00
+
+  jsr draw
+  jmp loop
+
+stall:
+  ldx #$ff
+stallInner:
+  nop
+  nop
+  dex
+  bne stallInner
+  rts
+
+draw:
+  jsr drawBall
+  jsr drawP1
+  jsr drawP2
+  rts
+
+drawBall:
+  ldy #$00
+  
+  ; Erase previous position
+  lda #$0
+  sta ($02), Y
+
+  ; Draw current position
+  lda #$01
+  sta ($00), Y
+  rts
+
+drawP1:
+
+  ; Zero out offset and offset counter
+  lda #$00
+  sta $04
+  sta $05
+
+  jsr drawP1Loop
+  rts
+
+drawP1Loop:
+  ; Get latest offset counter
+  ldx $05
+  inx
+  stx $05
+
+  ; Draw current pixel
+  ldy $04
+  lda #$a
+  sta ($10), Y
+
+  ; Update offset
+  tya 
+  clc
+  adc #$20
+  sta $04
+
+  ; Update offset counter
+  cpx #$07
+  bne drawP1Loop
+  rts
+
+drawP2:
+
+  ; Zero out offset and offset counter
+  lda #$00
+  sta $04
+  sta $05
+
+  jsr drawP2Loop
+  rts
+
+drawP2Loop:
+  ; Get latest offset counter
+  ldx $05
+  inx
+  stx $05
+
+  ; Draw current pixel
+  ldy $04
+  lda #$e
+  sta ($20), Y
+
+  ; Update offset
+  tya 
+  clc
+  adc #$20
+  sta $04
+
+  ; Update offset counter
+  cpx #$07
+  bne drawP2Loop
+  rts
+
+; Memory location $fe contains a new random byte on every instruction.
+; Memory location $ff contains the ascii code of the last key pressed.
+; 
+; Memory locations $200 to $5ff map to the screen pixels. Different values will
+; draw different colour pixels. The colours are:
+; 
+; $0: Black
+; $1: White
+; $2: Red
+; $3: Cyan
+; $4: Purple
+; $5: Green
+; $6: Blue
+; $7: Yellow
+; $8: Orange
+; $9: Brown
+; $a: Light red
+; $b: Dark grey
+; $c: Grey
+; $d: Light green
+; $e: Light blue
+; $f: Light grey
+    
