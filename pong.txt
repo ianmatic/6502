@@ -1,11 +1,33 @@
-; $00, $01 store the ball's current position
-; $02, $03 store the ball's previous position
-; $04 is paddle drawing offset
-; $05 is paddle offset counter
-; $10, $11 is P1 position
-; $12 is flag to indicate P1 movement. 0 none, 1 up, 2 down
-; $20, $21 is P2 position
-PADDLE_OFFSET = $04
+BALL_POS_L = $00 ; ball's current position
+BALL_POS_H = $01
+BALL_PREV_POS_L = $02 ; ball's previous position
+BALL_PREV_POS_H = $03
+BALL_COLOR_VAL = $01 ; White
+
+PADDLE_OFFSET = $04 ; paddle drawing offset
+PADDLE_OFFSET_COUNTER = $05 ; paddle offset counter
+PADDLE_HEIGHT_VAL = $07 ; the height (number of pixels) of each paddle
+
+P1_POSITION_L = $10
+P1_POSITION_H = $11
+P1_MOVEMENT_FLAG = $12 ; flag to indicate P1 movement
+
+P2_POSITION_L = $20
+P2_POSITION_H = $21
+P2_MOVEMENT_FLAG = $22 ; flag to indicate P2 movement
+
+MOVEMENT_NONE_VAL = $00
+MOVEMENT_UP_VAL = $01
+MOVEMENT_DOWN_VAL = $02
+
+P1_COLOR_VAL = $0a
+P2_COLOR_VAL = $0e
+
+KEY_PRESS = $ff
+W_KEY_VAL = $77
+S_KEY_VAL = $73
+
+ROW_SHIFT_VAL = $20 ; hex amount required to shift up or down 1 row
 
 jsr setup
 jmp loop
@@ -35,9 +57,9 @@ setupP2:
 setupBall:
   ; $0410 is the center of the screen
   lda #$10
-  sta $00
+  sta BALL_POS_L
   lda #$04
-  sta $01
+  sta BALL_POS_H
   rts
 
 loop:
@@ -59,39 +81,38 @@ stallInner:
   rts
 
 updateBall:
-  ; Copy current position into $02 and $03
-  ldx $00
-  stx $02
-  ldx $01
-  stx $03
+  ; Copy current position into prev position
+  ldx BALL_POS_L
+  stx BALL_PREV_POS_L
+  ldx BALL_POS_H
+  stx BALL_PREV_POS_H
 
   ; Move ball to the right
-  ldx $00
+  ldx BALL_POS_L
   inx
-  stx $00
+  stx BALL_POS_L
 
   rts
 updateP1:
 
   ; P1 controls
-  lda $ff
-  CMP #$77 ; W
+  lda KEY_PRESS
+  CMP #W_KEY_VAL
   BEQ moveP1Up
-  CMP #$73 ; S
+  CMP #S_KEY_VAL
   BEQ moveP1Down
 
   ; No movement
-  ldx #$00
-  stx $12
+  ldx #MOVEMENT_NONE_VAL
+  stx P1_MOVEMENT_FLAG
   rts
 moveP1Up:
-  ldx #$01
-  stx $12
-  ldx $10
+  ldx #MOVEMENT_UP_VAL
+  stx P1_MOVEMENT_FLAG
   jmp updateP2
 moveP1Down:
-  ldx #$02
-  stx $12
+  ldx #MOVEMENT_DOWN_VAL
+  stx P1_MOVEMENT_FLAG
   jmp updateP2
 
 updateP2:
@@ -109,48 +130,48 @@ drawBall:
   
   ; Erase previous position
   lda #$0
-  sta ($02), Y
+  sta (BALL_PREV_POS_L), Y
 
   ; Draw current position
-  lda #$01
-  sta ($00), Y
+  lda #BALL_COLOR_VAL
+  sta (BALL_POS_L), Y
   rts
 
 drawP1:
   ; erase pixels from movement
-  ; lda $12
-  ; cmp #$01
+  ; lda P1_MOVEMENT_FLAG
+  ; cmp #MOVEMENT_UP_VAL
   ; beq removeBottomP1Pixel
-  ; cmp #$02
+  ; cmp #MOVEMENT_DOWN_VAL
   ; beq removeTopP2Pixel
 
   ; Zero out offset and offset counter
   lda #$00
-  sta $04
-  sta $05
+  sta PADDLE_OFFSET
+  sta PADDLE_OFFSET_COUNTER
 
   jsr drawP1Loop
   rts
 
 drawP1Loop:
   ; Get latest offset counter
-  ldx $05
+  ldx PADDLE_OFFSET_COUNTER
   inx
-  stx $05
+  stx PADDLE_OFFSET_COUNTER
 
   ; Draw current pixel
-  ldy $04
-  lda #$0a
-  sta ($10), Y
+  ldy PADDLE_OFFSET
+  lda #P1_COLOR_VAL
+  sta (P1_POSITION_L), Y
 
   ; Update offset
   tya 
   clc
-  adc #$20
-  sta $04
+  adc #ROW_SHIFT_VAL
+  sta PADDLE_OFFSET
 
   ; Update offset counter
-  cpx #$07
+  cpx #PADDLE_HEIGHT_VAL
   bne drawP1Loop
   rts
 
@@ -158,7 +179,7 @@ drawP2:
 
   ; Zero out offset and offset counter
   lda #$00
-  sta $04
+  sta PADDLE_OFFSET
   sta $05
 
   jsr drawP2Loop
@@ -166,23 +187,23 @@ drawP2:
 
 drawP2Loop:
   ; Get latest offset counter
-  ldx $05
+  ldx PADDLE_OFFSET_COUNTER
   inx
-  stx $05
+  stx PADDLE_OFFSET_COUNTER
 
   ; Draw current pixel
-  ldy $04
-  lda #$e
-  sta ($20), Y
+  ldy PADDLE_OFFSET
+  lda #P2_COLOR_VAL
+  sta (P2_POSITION_L), Y
 
   ; Update offset
   tya 
   clc
-  adc #$20
-  sta $04
+  adc #ROW_SHIFT_VAL
+  sta PADDLE_OFFSET
 
   ; Update offset counter
-  cpx #$07
+  cpx #PADDLE_HEIGHT_VAL
   bne drawP2Loop
   rts
 
