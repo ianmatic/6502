@@ -1740,9 +1740,34 @@ function SimulatorWidget(node) {
 
   function Labels() {
     var labelIndex = [];
+    var constantIndex = Object.create(null);
 
     function indexLines(lines) {
-      for (var i = 0; i < lines.length; i++) {
+      var i, declaration, literal, value;
+
+      // Resolve constants before measuring instructions, including forward uses.
+      for (i = 0; i < lines.length; i++) {
+        declaration = lines[i].replace(/;.*/, "").trim().match(/^([A-Za-z_]\w*)\s*=\s*(.*)$/);
+        if (!declaration) { continue; }
+        literal = declaration[2].trim();
+        if (!/^(?:\$[0-9a-f]{1,4}|%[01]{1,16}|[0-9]+)$/i.test(literal)) {
+          message("**Invalid constant at line " + (i + 1) + ":** " + lines[i]);
+          return false;
+        }
+        value = literal[0] === "$" ? parseInt(literal.substring(1), 16) :
+          literal[0] === "%" ? parseInt(literal.substring(1), 2) : parseInt(literal, 10);
+        if (value > 0xffff) {
+          message("**Constant outside 16-bit range at line " + (i + 1) + ":** " + lines[i]);
+          return false;
+        }
+        if (!push(declaration[1], value)) {
+          message("**Label already defined at line " + (i + 1) + ":** " + lines[i]);
+          return false;
+        }
+        constantIndex[declaration[1]] = value;
+      }
+
+      for (i = 0; i < lines.length; i++) {
         if (!indexLine(lines[i])) {
           message("**Label already defined at line " + (i + 1) + ":** " + lines[i]);
           return false;
@@ -1768,17 +1793,17 @@ function SimulatorWidget(node) {
       // Find command or label
       if (input.match(/^\w+:/)) {
         var label = input.replace(/(^\w+):.*$/, "$1");
-        return push(label + "|" + currentPC);
+        return push(label, currentPC);
       }
       return true;
     }
 
     // push() - Push label to array. Return false if label already exists.
-    function push(name) {
+    function push(name, addr) {
       if (find(name)) {
         return false;
       }
-      labelIndex.push(name + "|");
+      labelIndex.push(name + "|" + addr);
       return true;
     }
 
@@ -1829,12 +1854,16 @@ function SimulatorWidget(node) {
 
     function reset() {
       labelIndex = [];
+      constantIndex = Object.create(null);
     }
 
     return {
       indexLines: indexLines,
       find: find,
       getPC: getPC,
+      getConstant: function (name) {
+        return constantIndex[name];
+      },
       displayMessage: displayMessage,
       reset: reset
     };
@@ -1925,6 +1954,8 @@ function SimulatorWidget(node) {
       defaultCodePC = 0x600;
 
       if (!labels.indexLines(lines)) {
+        codeAssembledOK = false;
+        ui.initialize();
         return false;
       }
 
@@ -1977,6 +2008,10 @@ function SimulatorWidget(node) {
       input = input.replace(/^\s+/, "");
       input = input.replace(/\s+$/, "");
 
+      if (/^[A-Za-z_]\w*\s*=/.test(input)) {
+        return true;
+      }
+
       // Find command or label
 
       if (input.match(/^\w+:/)) {
@@ -1999,9 +2034,12 @@ function SimulatorWidget(node) {
 
       command = command.toUpperCase();
 
-      if (input.match(/^\*\s*=\s*\$?[0-9a-f]*$/)) {
+      if (input.match(/^\*\s*=/)) {
         // equ spotted
-        param = input.replace(/^\s*\*\s*=\s*/, "");
+        param = resolveConstant(input.replace(/^\s*\*\s*=\s*/, ""));
+        if (!/^(?:\$[0-9a-f]{1,4}|[0-9]+)$/i.test(param)) {
+          return false;
+        }
         if (param[0] === "$") {
           param = param.replace(/^\$/, "");
           addr = parseInt(param, 16);
@@ -2026,7 +2064,7 @@ function SimulatorWidget(node) {
         }
       }
 
-      param = param.replace(/[ ]/g, "");
+      param = param.replace(/\s/g, "");
 
       if (command === "DCB") {
         return DCB(param);
@@ -2036,6 +2074,9 @@ function SimulatorWidget(node) {
       for (var o = 0; o < Opcodes.length; o++) {
         if (Opcodes[o][0] === command) {
           if (checkSingle(param, Opcodes[o][11])) { return true; }
+          if (Opcodes[o][12] === null) {
+            param = resolveConstant(param);
+          }
           if (checkImmediate(param, Opcodes[o][1])) { return true; }
           if (checkZeroPage(param, Opcodes[o][2])) { return true; }
           if (checkZeroPageX(param, Opcodes[o][3])) { return true; }
@@ -2052,13 +2093,29 @@ function SimulatorWidget(node) {
       return false; // Unknown opcode
     }
 
+    function resolveConstant(param) {
+      return param.replace(/^(#|\()?([A-Za-z_]\w*)(,[XY]|,[XY]\)|\),[XY]|\))?$/i,
+        function (operand, prefix, name, suffix) {
+          var value = labels.getConstant(name);
+          if (value === undefined) { return operand; }
+          return (prefix || "") + "$" +
+            (value <= 0xff ? num2hex(value) : addr2hex(value)) + (suffix || "");
+        });
+    }
+
     function DCB(param) {
-      var values, number, str, ch;
+      var values, number, str, ch, constant;
       values = param.split(",");
       if (values.length === 0) { return false; }
       for (var v = 0; v < values.length; v++) {
         str = values[v];
         if (str) {
+          constant = labels.getConstant(str);
+          if (constant !== undefined) {
+            if (constant > 0xff) { return false; }
+            pushByte(constant);
+            continue;
+          }
           ch = str.substring(0, 1);
           if (ch === "$") {
             number = parseInt(str.replace(/^\$/, ""), 16);
@@ -2147,9 +2204,9 @@ function SimulatorWidget(node) {
     function checkIndirect(param, opcode) {
       var value;
       if (opcode === null) { return false; }
-      if (param.match(/^\(\$[0-9a-f]{4}\)$/i)) {
+      if (param.match(/^\(\$[0-9a-f]{1,4}\)$/i)) {
         pushByte(opcode);
-        value = param.replace(/^\(\$([0-9a-f]{4}).*$/i, "$1");
+        value = param.replace(/^\(\$([0-9a-f]{1,4}).*$/i, "$1");
         if (value < 0 || value > 0xffff) { return false; }
         pushWord(parseInt(value, 16));
         return true;
@@ -2219,7 +2276,7 @@ function SimulatorWidget(node) {
     function checkAbsoluteX(param, opcode) {
       var number, value, addr;
       if (opcode === null) { return false; }
-      if (param.match(/^\$[0-9a-f]{3,4},X$/i)) {
+      if (param.match(/^\$[0-9a-f]{1,4},X$/i)) {
         pushByte(opcode);
         number = param.replace(/^\$([0-9a-f]*),X/i, "$1");
         value = parseInt(number, 16);
@@ -2249,7 +2306,7 @@ function SimulatorWidget(node) {
     function checkAbsoluteY(param, opcode) {
       var number, value, addr;
       if (opcode === null) { return false; }
-      if (param.match(/^\$[0-9a-f]{3,4},Y$/i)) {
+      if (param.match(/^\$[0-9a-f]{1,4},Y$/i)) {
         pushByte(opcode);
         number = param.replace(/^\$([0-9a-f]*),Y/i, "$1");
         value = parseInt(number, 16);
@@ -2326,7 +2383,7 @@ function SimulatorWidget(node) {
       var value, number, addr;
       if (opcode === null) { return false; }
       pushByte(opcode);
-      if (param.match(/^\$[0-9a-f]{3,4}$/i)) {
+      if (param.match(/^\$[0-9a-f]{1,4}$/i)) {
         value = parseInt(param.replace(/^\$/, ""), 16);
         if (value < 0 || value > 0xffff) { return false; }
         pushWord(value);
