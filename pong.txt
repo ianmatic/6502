@@ -3,7 +3,9 @@
 ; $04 is paddle drawing offset
 ; $05 is paddle offset counter
 ; $10, $11 is P1 position
+; $12 is flag to indicate P1 movement. 0 none, 1 up, 2 down
 ; $20, $21 is P2 position
+PADDLE_OFFSET = $04
 
 jsr setup
 jmp loop
@@ -40,7 +42,23 @@ setupBall:
 
 loop:
   jsr stall
+  jsr updateBall
+  jsr updateP1
+  jsr updateP2
+  jsr draw
+  jmp loop
 
+
+stall:
+  ldx #$ff
+stallInner:
+  nop
+  nop
+  dex
+  bne stallInner
+  rts
+
+updateBall:
   ; Copy current position into $02 and $03
   ldx $00
   stx $02
@@ -52,16 +70,32 @@ loop:
   inx
   stx $00
 
-  jsr draw
-  jmp loop
+  rts
+updateP1:
 
-stall:
-  ldx #$ff
-stallInner:
-  nop
-  nop
-  dex
-  bne stallInner
+  ; P1 controls
+  lda $ff
+  CMP #$77 ; W
+  BEQ moveP1Up
+  CMP #$73 ; S
+  BEQ moveP1Down
+
+  ; No movement
+  ldx #$00
+  stx $12
+  rts
+moveP1Up:
+  ldx #$01
+  stx $12
+  ldx $10
+  jmp updateP2
+moveP1Down:
+  ldx #$02
+  stx $12
+  jmp updateP2
+
+updateP2:
+  ; P2 controls: O (6f) & L (6c)
   rts
 
 draw:
@@ -83,6 +117,12 @@ drawBall:
   rts
 
 drawP1:
+  ; erase pixels from movement
+  ; lda $12
+  ; cmp #$01
+  ; beq removeBottomP1Pixel
+  ; cmp #$02
+  ; beq removeTopP2Pixel
 
   ; Zero out offset and offset counter
   lda #$00
@@ -100,7 +140,7 @@ drawP1Loop:
 
   ; Draw current pixel
   ldy $04
-  lda #$a
+  lda #$0a
   sta ($10), Y
 
   ; Update offset
