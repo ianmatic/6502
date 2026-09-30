@@ -8,12 +8,19 @@ PADDLE_OFFSET = $04 ; paddle drawing offset
 PADDLE_OFFSET_COUNTER = $05 ; paddle offset counter
 PADDLE_HEIGHT_VAL = $07 ; the height (number of pixels) of each paddle
 
-P1_POSITION_L = $10
-P1_POSITION_H = $11
-P1_MOVEMENT_FLAG = $12 ; flag to indicate P1 movement
+P1_POSITION_TOP_L = $10
+P1_POSITION_TOP_H = $11
+P1_POSITION_BOTTOM_L = $12
+P1_POSITION_BOTTOM_H = $13
 
-P2_POSITION_L = $20
-P2_POSITION_H = $21
+P1_POSITION_TOP_PREV_L = $14
+P1_POSITION_TOP_PREV_H = $15
+P1_POSITION_BOTTOM_PREV_L = $16
+P1_POSITION_BOTTOM_PREV_H = $17
+P1_MOVEMENT_FLAG = $18 ; flag to indicate P1 movement
+
+P2_POSITION_TOP_L = $20
+P2_POSITION_TOP_H = $21
 P2_MOVEMENT_FLAG = $22 ; flag to indicate P2 movement
 
 MOVEMENT_NONE_VAL = $00
@@ -24,6 +31,7 @@ P1_COLOR_VAL = $0a
 P2_COLOR_VAL = $0e
 
 KEY_PRESS = $ff
+PREV_KEY_PRESS = $af
 W_KEY_VAL = $77
 S_KEY_VAL = $73
 
@@ -39,19 +47,25 @@ setup:
   rts
 
 setupP1:
-  ; $03a2 is the starting point for P1's position
+  ; $03a2 is the top initial point for P1's position
   lda #$a2
-  sta $10
+  sta P1_POSITION_TOP_L
   lda #$03
-  sta $11
+  sta P1_POSITION_TOP_H
+
+  ; $03b6 is the bottom initial point for P1's position
+  lda #$b6
+  sta P1_POSITION_BOTTOM_L
+  lda #$03
+  sta P1_POSITION_BOTTOM_H
   rts
 
 setupP2:
-  ; $03be is the starting point for P1's position
+  ; $03be is the starting top point for P1's position
   lda #$be
-  sta $20
+  sta P2_POSITION_TOP_L
   lda #$03
-  sta $21
+  sta P2_POSITION_TOP_H
   rts
 
 setupBall:
@@ -64,12 +78,12 @@ setupBall:
 
 loop:
   jsr stall
+  jsr handleInput
   jsr updateBall
   jsr updateP1
   jsr updateP2
   jsr draw
   jmp loop
-
 
 stall:
   ldx #$ff
@@ -79,6 +93,34 @@ stallInner:
   dex
   bne stallInner
   rts
+
+handleInput:
+  lda PREV_KEY_PRESS
+  ldx #MOVEMENT_NONE_VAL
+  CMP KEY_PRESS
+  BNE checkCurrentKeyPress
+updatePrevKeyPress:
+  sta PREV_KEY_PRESS
+  lda #$00
+  sta KEY_PRESS
+  stx P1_MOVEMENT_FLAG
+  rts
+checkCurrentKeyPress:
+  lda KEY_PRESS
+  CMP #$00
+  BNE recordKeyPress
+  jmp updatePrevKeyPress
+recordKeyPress:
+  CMP #W_KEY_VAL
+  BNE checkSKey
+  ldx #MOVEMENT_UP_VAL
+  jmp updatePrevKeyPress
+checkSKey:
+  CMP #S_KEY_VAL
+  BNE doNothingP1
+  ldx #MOVEMENT_DOWN_VAL
+doNothingP1:
+  jmp updatePrevKeyPress
 
 updateBall:
   ; Copy current position into prev position
@@ -94,26 +136,66 @@ updateBall:
 
   rts
 updateP1:
+  lda P1_POSITION_TOP_L
+  sta P1_POSITION_TOP_PREV_L
 
-  ; P1 controls
-  lda KEY_PRESS
-  CMP #W_KEY_VAL
+  lda P1_POSITION_TOP_H
+  sta P1_POSITION_TOP_PREV_H
+
+  lda P1_POSITION_BOTTOM_L
+  sta P1_POSITION_BOTTOM_PREV_L
+
+  lda P1_POSITION_BOTTOM_H
+  sta P1_POSITION_BOTTOM_PREV_H
+
+  ldx P1_MOVEMENT_FLAG
+  CPX #MOVEMENT_UP_VAL
   BEQ moveP1Up
-  CMP #S_KEY_VAL
+  CPX #MOVEMENT_DOWN_VAL
   BEQ moveP1Down
-
-  ; No movement
-  ldx #MOVEMENT_NONE_VAL
-  stx P1_MOVEMENT_FLAG
   rts
+
 moveP1Up:
-  ldx #MOVEMENT_UP_VAL
-  stx P1_MOVEMENT_FLAG
-  jmp updateP2
+  sec 
+  lda P1_POSITION_TOP_L
+  sbc #ROW_SHIFT_VAL
+  sta P1_POSITION_TOP_L
+
+  lda P1_POSITION_TOP_H
+  sbc #$00
+  sta P1_POSITION_TOP_H
+
+  sec 
+  lda P1_POSITION_BOTTOM_L
+  sbc #ROW_SHIFT_VAL
+  sta P1_POSITION_BOTTOM_L
+
+  lda P1_POSITION_BOTTOM_H
+  sbc #$00
+  sta P1_POSITION_BOTTOM_H
+
+  rts
 moveP1Down:
-  ldx #MOVEMENT_DOWN_VAL
-  stx P1_MOVEMENT_FLAG
-  jmp updateP2
+
+  clc 
+  lda P1_POSITION_TOP_L
+  adc #ROW_SHIFT_VAL
+  sta P1_POSITION_TOP_L
+
+  lda P1_POSITION_TOP_H
+  adc #$00
+  sta P1_POSITION_TOP_H
+
+  clc 
+  lda P1_POSITION_BOTTOM_L
+  adc #ROW_SHIFT_VAL
+  sta P1_POSITION_BOTTOM_L
+
+  lda P1_POSITION_BOTTOM_H
+  adc #$00
+  sta P1_POSITION_BOTTOM_H
+
+  rts
 
 updateP2:
   ; P2 controls: O (6f) & L (6c)
@@ -139,12 +221,13 @@ drawBall:
 
 drawP1:
   ; erase pixels from movement
-  ; lda P1_MOVEMENT_FLAG
-  ; cmp #MOVEMENT_UP_VAL
-  ; beq removeBottomP1Pixel
-  ; cmp #MOVEMENT_DOWN_VAL
-  ; beq removeTopP2Pixel
+  lda P1_MOVEMENT_FLAG
+  cmp #MOVEMENT_UP_VAL
+  beq removeBottomP1Pixel
+  cmp #MOVEMENT_DOWN_VAL
+  beq removeTopP1Pixel
 
+zeroOut:
   ; Zero out offset and offset counter
   lda #$00
   sta PADDLE_OFFSET
@@ -152,6 +235,17 @@ drawP1:
 
   jsr drawP1Loop
   rts
+
+removeBottomP1Pixel:
+  lda #$00
+  ldy #$00
+  sta (P1_POSITION_BOTTOM_PREV_L), Y
+  jmp zeroOut
+removeTopP1Pixel:
+  lda #$00
+  ldy #$00
+  sta (P1_POSITION_TOP_PREV_L), Y
+  jmp zeroOut
 
 drawP1Loop:
   ; Get latest offset counter
@@ -162,7 +256,7 @@ drawP1Loop:
   ; Draw current pixel
   ldy PADDLE_OFFSET
   lda #P1_COLOR_VAL
-  sta (P1_POSITION_L), Y
+  sta (P1_POSITION_TOP_L), Y
 
   ; Update offset
   tya 
@@ -194,7 +288,7 @@ drawP2Loop:
   ; Draw current pixel
   ldy PADDLE_OFFSET
   lda #P2_COLOR_VAL
-  sta (P2_POSITION_L), Y
+  sta (P2_POSITION_TOP_L), Y
 
   ; Update offset
   tya 
