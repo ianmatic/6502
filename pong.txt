@@ -53,10 +53,10 @@ setupP1:
   lda #$03
   sta P1_POSITION_TOP_H
 
-  ; $03b6 is the bottom initial point for P1's position
-  lda #$b6
+  ; $0462 is the bottom initial point for P1's position
+  lda #$62
   sta P1_POSITION_BOTTOM_L
-  lda #$03
+  lda #$04
   sta P1_POSITION_BOTTOM_H
   rts
 
