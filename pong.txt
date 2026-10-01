@@ -31,9 +31,10 @@ P1_COLOR_VAL = $0a
 P2_COLOR_VAL = $0e
 
 KEY_PRESS = $ff
-PREV_KEY_PRESS = $af
 W_KEY_VAL = $77
 S_KEY_VAL = $73
+O_KEY_VAL = $6f
+L_KEY_VAL = $6c
 
 ROW_SHIFT_VAL = $20 ; hex amount required to shift up or down 1 row
 
@@ -95,32 +96,42 @@ stallInner:
   rts
 
 handleInput:
-  lda PREV_KEY_PRESS
-  ldx #MOVEMENT_NONE_VAL
-  CMP KEY_PRESS
-  BNE checkCurrentKeyPress
-updatePrevKeyPress:
-  sta PREV_KEY_PRESS
-  lda #$00
-  sta KEY_PRESS
-  stx P1_MOVEMENT_FLAG
-  rts
-checkCurrentKeyPress:
   lda KEY_PRESS
-  CMP #$00
-  BNE recordKeyPress
-  jmp updatePrevKeyPress
-recordKeyPress:
+  jsr handleP1Input
+  jsr handleP2Input
+  rts
+
+handleP1Input:
   CMP #W_KEY_VAL
   BNE checkSKey
   ldx #MOVEMENT_UP_VAL
-  jmp updatePrevKeyPress
+  jmp returnP1Input
 checkSKey:
   CMP #S_KEY_VAL
-  BNE doNothingP1
+  BNE noP1Input
   ldx #MOVEMENT_DOWN_VAL
-doNothingP1:
-  jmp updatePrevKeyPress
+  jmp returnP1Input
+noP1Input:
+  ldx #MOVEMENT_NONE_VAL
+returnP1Input:
+  stx P1_MOVEMENT_FLAG
+  rts
+
+handleP2Input:
+  CMP #O_KEY_VAL
+  BNE checkLKey
+  ldx #MOVEMENT_UP_VAL
+  jmp returnP2Input
+checkLKey:
+  CMP #L_KEY_VAL
+  BNE noP2Input
+  ldx #MOVEMENT_DOWN_VAL
+  jmp returnP2Input
+noP2Input:
+  ldx #MOVEMENT_NONE_VAL
+returnP2Input:
+  stx P2_MOVEMENT_FLAG
+  rts
 
 updateBall:
   ; Copy current position into prev position
