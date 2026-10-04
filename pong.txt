@@ -21,7 +21,15 @@ P1_MOVEMENT_FLAG = $18 ; flag to indicate P1 movement
 
 P2_POSITION_TOP_L = $20
 P2_POSITION_TOP_H = $21
-P2_MOVEMENT_FLAG = $22 ; flag to indicate P2 movement
+P2_POSITION_BOTTOM_L = $22
+P2_POSITION_BOTTOM_H = $23
+
+P2_POSITION_TOP_PREV_L = $24
+P2_POSITION_TOP_PREV_H = $25
+P2_POSITION_BOTTOM_PREV_L = $26
+P2_POSITION_BOTTOM_PREV_H = $27
+
+P2_MOVEMENT_FLAG = $28 ; flag to indicate P2 movement
 
 MOVEMENT_NONE_VAL = $00
 MOVEMENT_UP_VAL = $01
@@ -33,8 +41,11 @@ P2_COLOR_VAL = $0e
 KEY_PRESS = $ff
 W_KEY_VAL = $77
 S_KEY_VAL = $73
+A_KEY_VAL = $61
+
 O_KEY_VAL = $6f
 L_KEY_VAL = $6c
+K_KEY_VAL = $6b
 
 ROW_SHIFT_VAL = $20 ; hex amount required to shift up or down 1 row
 
@@ -62,11 +73,17 @@ setupP1:
   rts
 
 setupP2:
-  ; $03be is the starting top point for P1's position
+  ; $03be is the starting top point for P2's position
   lda #$be
   sta P2_POSITION_TOP_L
   lda #$03
   sta P2_POSITION_TOP_H
+
+  ; $047e is the bottom initial point for P2's position
+  lda #$7e
+  sta P2_POSITION_BOTTOM_L
+  lda #$04
+  sta P2_POSITION_BOTTOM_H
   rts
 
 setupBall:
@@ -105,32 +122,38 @@ handleP1Input:
   CMP #W_KEY_VAL
   BNE checkSKey
   ldx #MOVEMENT_UP_VAL
-  jmp returnP1Input
-checkSKey:
-  CMP #S_KEY_VAL
-  BNE noP1Input
-  ldx #MOVEMENT_DOWN_VAL
-  jmp returnP1Input
-noP1Input:
-  ldx #MOVEMENT_NONE_VAL
-returnP1Input:
   stx P1_MOVEMENT_FLAG
   rts
+checkSKey:
+  CMP #S_KEY_VAL
+  BNE checkAKey
+  ldx #MOVEMENT_DOWN_VAL
+  stx P1_MOVEMENT_FLAG
+  rts
+checkAKey:
+  CMP #A_KEY_VAL
+  BNE return
+  ldx #MOVEMENT_NONE_VAL
+  stx P1_MOVEMENT_FLAG
 
 handleP2Input:
   CMP #O_KEY_VAL
   BNE checkLKey
   ldx #MOVEMENT_UP_VAL
-  jmp returnP2Input
+  stx P2_MOVEMENT_FLAG
+  rts
 checkLKey:
   CMP #L_KEY_VAL
-  BNE noP2Input
+  BNE checkKKey
   ldx #MOVEMENT_DOWN_VAL
-  jmp returnP2Input
-noP2Input:
-  ldx #MOVEMENT_NONE_VAL
-returnP2Input:
   stx P2_MOVEMENT_FLAG
+  rts
+checkKKey:
+  CMP #K_KEY_VAL
+  BNE return
+  ldx #MOVEMENT_NONE_VAL
+  stx P2_MOVEMENT_FLAG
+return:
   rts
 
 updateBall:
@@ -147,6 +170,7 @@ updateBall:
 
   rts
 updateP1:
+  ; Update prev position
   lda P1_POSITION_TOP_L
   sta P1_POSITION_TOP_PREV_L
 
@@ -159,6 +183,7 @@ updateP1:
   lda P1_POSITION_BOTTOM_H
   sta P1_POSITION_BOTTOM_PREV_H
 
+  ; move P1 according to flag
   ldx P1_MOVEMENT_FLAG
   CPX #MOVEMENT_UP_VAL
   BEQ moveP1Up
@@ -172,6 +197,7 @@ moveP1Up:
   sbc #ROW_SHIFT_VAL
   sta P1_POSITION_TOP_L
 
+  ; Handle carry
   lda P1_POSITION_TOP_H
   sbc #$00
   sta P1_POSITION_TOP_H
@@ -181,6 +207,7 @@ moveP1Up:
   sbc #ROW_SHIFT_VAL
   sta P1_POSITION_BOTTOM_L
 
+  ; Handle carry
   lda P1_POSITION_BOTTOM_H
   sbc #$00
   sta P1_POSITION_BOTTOM_H
@@ -193,6 +220,7 @@ moveP1Down:
   adc #ROW_SHIFT_VAL
   sta P1_POSITION_TOP_L
 
+  ; Handle carry
   lda P1_POSITION_TOP_H
   adc #$00
   sta P1_POSITION_TOP_H
@@ -202,6 +230,7 @@ moveP1Down:
   adc #ROW_SHIFT_VAL
   sta P1_POSITION_BOTTOM_L
 
+  ; Handle carry
   lda P1_POSITION_BOTTOM_H
   adc #$00
   sta P1_POSITION_BOTTOM_H
@@ -209,7 +238,71 @@ moveP1Down:
   rts
 
 updateP2:
-  ; P2 controls: O (6f) & L (6c)
+  ; Update prev position
+  lda P2_POSITION_TOP_L
+  sta P2_POSITION_TOP_PREV_L
+
+  lda P2_POSITION_TOP_H
+  sta P2_POSITION_TOP_PREV_H
+
+  lda P2_POSITION_BOTTOM_L
+  sta P2_POSITION_BOTTOM_PREV_L
+
+  lda P2_POSITION_BOTTOM_H
+  sta P2_POSITION_BOTTOM_PREV_H
+
+  ; move P2 according to flag
+  ldx P2_MOVEMENT_FLAG
+  CPX #MOVEMENT_UP_VAL
+  BEQ moveP2Up
+  CPX #MOVEMENT_DOWN_VAL
+  BEQ moveP2Down
+  rts
+
+moveP2Up:
+  sec 
+  lda P2_POSITION_TOP_L
+  sbc #ROW_SHIFT_VAL
+  sta P2_POSITION_TOP_L
+
+  ; Handle carry
+  lda P2_POSITION_TOP_H
+  sbc #$00
+  sta P2_POSITION_TOP_H
+
+  sec 
+  lda P2_POSITION_BOTTOM_L
+  sbc #ROW_SHIFT_VAL
+  sta P2_POSITION_BOTTOM_L
+
+  ; Handle carry
+  lda P2_POSITION_BOTTOM_H
+  sbc #$00
+  sta P2_POSITION_BOTTOM_H
+
+  rts
+moveP2Down:
+
+  clc 
+  lda P2_POSITION_TOP_L
+  adc #ROW_SHIFT_VAL
+  sta P2_POSITION_TOP_L
+
+  ; Handle carry
+  lda P2_POSITION_TOP_H
+  adc #$00
+  sta P2_POSITION_TOP_H
+
+  clc 
+  lda P2_POSITION_BOTTOM_L
+  adc #ROW_SHIFT_VAL
+  sta P2_POSITION_BOTTOM_L
+
+  ; Handle carry
+  lda P2_POSITION_BOTTOM_H
+  adc #$00
+  sta P2_POSITION_BOTTOM_H
+
   rts
 
 draw:
@@ -238,25 +331,28 @@ drawP1:
   cmp #MOVEMENT_DOWN_VAL
   beq removeTopP1Pixel
 
+  jsr zeroOut
+  jmp drawP1Loop
+
 zeroOut:
   ; Zero out offset and offset counter
   lda #$00
   sta PADDLE_OFFSET
   sta PADDLE_OFFSET_COUNTER
-
-  jsr drawP1Loop
   rts
 
 removeBottomP1Pixel:
   lda #$00
   ldy #$00
   sta (P1_POSITION_BOTTOM_PREV_L), Y
-  jmp zeroOut
+  jsr zeroOut
+  jmp drawP1Loop
 removeTopP1Pixel:
   lda #$00
   ldy #$00
   sta (P1_POSITION_TOP_PREV_L), Y
-  jmp zeroOut
+  jsr zeroOut
+  jmp drawP1Loop
 
 drawP1Loop:
   ; Get latest offset counter
@@ -281,14 +377,29 @@ drawP1Loop:
   rts
 
 drawP2:
+  ; erase pixels from movement
+  lda P2_MOVEMENT_FLAG
+  cmp #MOVEMENT_UP_VAL
+  beq removeBottomP2Pixel
+  cmp #MOVEMENT_DOWN_VAL
+  beq removeTopP2Pixel
 
-  ; Zero out offset and offset counter
+  jsr zeroOut
+  jmp drawP2Loop
+
+removeBottomP2Pixel:
   lda #$00
-  sta PADDLE_OFFSET
-  sta $05
+  ldy #$00
+  sta (P2_POSITION_BOTTOM_PREV_L), Y
+  jsr zeroOut
+  jmp drawP2Loop
+removeTopP2Pixel:
+  lda #$00
+  ldy #$00
+  sta (P2_POSITION_TOP_PREV_L), Y
 
-  jsr drawP2Loop
-  rts
+  jsr zeroOut
+  jmp drawP2Loop
 
 drawP2Loop:
   ; Get latest offset counter
