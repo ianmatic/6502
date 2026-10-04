@@ -3,6 +3,9 @@ BALL_POS_H = $01
 BALL_PREV_POS_L = $02 ; ball's previous position
 BALL_PREV_POS_H = $03
 BALL_COLOR_VAL = $01 ; White
+BALL_DIR = $08
+BALL_DIR_LEFT_VAL = $00
+BALL_DIR_RIGHT_VAL = $01
 
 PADDLE_OFFSET = $04 ; paddle drawing offset
 PADDLE_OFFSET_COUNTER = $05 ; paddle offset counter
@@ -19,6 +22,9 @@ P1_POSITION_BOTTOM_PREV_L = $16
 P1_POSITION_BOTTOM_PREV_H = $17
 P1_MOVEMENT_FLAG = $18 ; flag to indicate P1 movement
 
+P1_SCORE = $19
+P1_SCORE_LOCATION = $0200
+
 P2_POSITION_TOP_L = $20
 P2_POSITION_TOP_H = $21
 P2_POSITION_BOTTOM_L = $22
@@ -28,8 +34,10 @@ P2_POSITION_TOP_PREV_L = $24
 P2_POSITION_TOP_PREV_H = $25
 P2_POSITION_BOTTOM_PREV_L = $26
 P2_POSITION_BOTTOM_PREV_H = $27
-
 P2_MOVEMENT_FLAG = $28 ; flag to indicate P2 movement
+
+P2_SCORE = $29
+P2_SCORE_LOCATION = $021f
 
 MOVEMENT_NONE_VAL = $00
 MOVEMENT_UP_VAL = $01
@@ -70,6 +78,9 @@ setupP1:
   sta P1_POSITION_BOTTOM_L
   lda #$04
   sta P1_POSITION_BOTTOM_H
+
+  lda #$00
+  sta P1_SCORE
   rts
 
 setupP2:
@@ -84,6 +95,9 @@ setupP2:
   sta P2_POSITION_BOTTOM_L
   lda #$04
   sta P2_POSITION_BOTTOM_H
+
+  lda #$00
+  sta P2_SCORE
   rts
 
 setupBall:
@@ -92,6 +106,11 @@ setupBall:
   sta BALL_POS_L
   lda #$04
   sta BALL_POS_H
+
+  ; go left if random number is even, otherwise right
+  lda $fe
+  and #$01
+  sta BALL_DIR
   rts
 
 loop:
@@ -156,6 +175,17 @@ checkKKey:
 return:
   rts
 
+moveBallleft:
+  ldx BALL_POS_L
+  dex
+  stx BALL_POS_L
+  jmp checkBallOutOfBounds
+moveBallRight:
+  ldx BALL_POS_L
+  inx
+  stx BALL_POS_L
+  jmp checkBallOutOfBounds
+
 updateBall:
   ; Copy current position into prev position
   ldx BALL_POS_L
@@ -163,12 +193,40 @@ updateBall:
   ldx BALL_POS_H
   stx BALL_PREV_POS_H
 
-  ; Move ball to the right
-  ldx BALL_POS_L
-  inx
-  stx BALL_POS_L
+  lda BALL_DIR
+  cmp #BALL_DIR_RIGHT_VAL
+  beq moveBallRight
+  jmp moveBallleft
 
+checkBallOutOfBounds:
+  ; rightmost edge lower byte is always %xxx11111, so if the last 5 bits are set then we are at right edge
+  lda BALL_POS_L
+  and #%00011111
+  cmp #%00011111
+  bne checkBallLeft
+  
+  ldx P1_SCORE
+  inx 
+  stx P1_SCORE
+
+  jsr setupBall
   rts
+checkBallLeft:
+  ; leftmost edge lower byte is always %xxx11111
+  lda #%00011111
+  bit BALL_POS_L
+  bne checkBallTop
+
+  ldx P2_SCORE
+  inx 
+  stx P2_SCORE
+
+  jsr setupBall
+  rts
+checkBallTop:
+  rts
+
+resetBall:
 updateP1:
   ; Update prev position
   lda P1_POSITION_TOP_L
@@ -309,6 +367,7 @@ draw:
   jsr drawBall
   jsr drawP1
   jsr drawP2
+  jsr drawScore
   rts
 
 drawBall:
@@ -421,6 +480,14 @@ drawP2Loop:
   ; Update offset counter
   cpx #PADDLE_HEIGHT_VAL
   bne drawP2Loop
+  rts
+
+drawScore:
+  lda P1_SCORE
+  sta P1_SCORE_LOCATION
+
+  lda P2_SCORE
+  sta P2_SCORE_LOCATION
   rts
 
 ; Memory location $fe contains a new random byte on every instruction.
