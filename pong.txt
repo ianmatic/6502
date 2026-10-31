@@ -126,7 +126,6 @@ stall:
   ldx #$ff
 stallInner:
   nop
-  nop
   dex
   bne stallInner
   rts
@@ -175,7 +174,7 @@ checkKKey:
 return:
   rts
 
-moveBallleft:
+moveBallLeft:
   ldx BALL_POS_L
   dex
   stx BALL_POS_L
@@ -212,10 +211,10 @@ checkBallOutOfBounds:
   jsr setupBall
   rts
 checkBallLeft:
-  ; leftmost edge lower byte is always %xxx11111
+  ; leftmost edge lower byte is always %xxx000000
   lda #%00011111
   bit BALL_POS_L
-  bne checkBallTop
+  bne checkP1Collision
 
   ldx P2_SCORE
   inx 
@@ -223,7 +222,29 @@ checkBallLeft:
 
   jsr setupBall
   rts
-checkBallTop:
+checkP1Collision:
+  ; p1 lower byte is always %xxx00001 (column 01)
+  lda BALL_POS_L
+  and #%00011111 ; ignore first 3 bits as they are row info
+  cmp #%00000001
+  bne checkP2Collision
+
+  lda BALL_POS_H
+  cmp P1_POSITION_TOP_H    
+  bcc checkP2Collision
+  bne checkP1Bottom ; ball is below top
+
+  ; Higher byte matches, check lower byte
+  lda BALL_POS_L
+  cmp P1_POSITION_TOP_L
+  bcc checkP2Collision
+  jmp checkP1Bottom ; ball is at or below top
+checkP1Bottom:
+  lda BALL_POS_H
+  cmp P1_POSITION_BOTTOM_H
+  bcc checkP2Collision
+checkP2Collision:
+  ; p2 lower byte is always %xxx11110
   rts
 
 resetBall:
