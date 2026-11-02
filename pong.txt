@@ -67,14 +67,14 @@ setup:
   rts
 
 setupP1:
-  ; $03a2 is the top initial point for P1's position
-  lda #$a2
+  ; $03a1 is the top initial point for P1's position
+  lda #$a1
   sta P1_POSITION_TOP_L
   lda #$03
   sta P1_POSITION_TOP_H
 
-  ; $0462 is the bottom initial point for P1's position
-  lda #$62
+  ; $0461 is the bottom initial point for P1's position
+  lda #$61
   sta P1_POSITION_BOTTOM_L
   lda #$04
   sta P1_POSITION_BOTTOM_H
@@ -195,7 +195,7 @@ updateBall:
   lda BALL_DIR
   cmp #BALL_DIR_RIGHT_VAL
   beq moveBallRight
-  jmp moveBallleft
+  jmp moveBallLeft
 
 checkBallOutOfBounds:
   ; rightmost edge lower byte is always %xxx11111, so if the last 5 bits are set then we are at right edge
@@ -237,17 +237,57 @@ checkP1Collision:
   ; Higher byte matches, check lower byte
   lda BALL_POS_L
   cmp P1_POSITION_TOP_L
-  bcc checkP2Collision
-  jmp checkP1Bottom ; ball is at or below top
+  bcs checkP1Bottom
+  jmp checkP2Collision ; ball is at or below top
 checkP1Bottom:
-  lda BALL_POS_H
-  cmp P1_POSITION_BOTTOM_H
+  lda P1_POSITION_BOTTOM_H
+  cmp BALL_POS_H
   bcc checkP2Collision
-checkP2Collision:
-  ; p2 lower byte is always %xxx11110
+  bne collideP1
+
+  ; Higher byte matches, check lower byte
+  lda P1_POSITION_BOTTOM_L
+  cmp BALL_POS_L
+  bcs collideP1
+
+  jmp checkP2Collision
+collideP1:
+  jsr setupBall
   rts
 
-resetBall:
+checkP2Collision:
+  ; p2 lower byte is always %xxx11110 (column 30)
+  lda BALL_POS_L
+  and #%00011111 ; ignore first 3 bits as they are row info
+  cmp #%00011110
+  bne return
+
+  lda BALL_POS_H
+  cmp P2_POSITION_TOP_H    
+  bcc return
+  bne checkP2Bottom ; ball is below top
+
+  ; Higher byte matches, check lower byte
+  lda BALL_POS_L
+  cmp P2_POSITION_TOP_L
+  bcs checkP2Bottom
+  jmp return ; ball is at or below top
+  rts
+checkP2Bottom:
+  lda P2_POSITION_BOTTOM_H
+  cmp BALL_POS_H
+  bcc return
+  bne collideP2
+
+  ; Higher byte matches, check lower byte
+  lda P2_POSITION_BOTTOM_L
+  cmp BALL_POS_L
+  bcs collideP2
+  rts
+collideP2:
+  jsr setupBall
+  rts
+
 updateP1:
   ; Update prev position
   lda P1_POSITION_TOP_L
