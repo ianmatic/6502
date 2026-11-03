@@ -249,7 +249,7 @@ checkBallLeft:
   ; leftmost edge lower byte is always %xxx000000
   lda #%00011111
   bit BALL_POS_L
-  bne checkP1Collision
+  bne checkBallTop
 
   ldx P2_SCORE
   inx 
@@ -257,6 +257,35 @@ checkBallLeft:
 
   jsr setupBall
   rts
+checkBallTop:
+  ; top row high byte is always %00000010
+  lda BALL_POS_H
+  cmp #%00000010
+  bne checkBallBottom
+  ; low byte is always 000xxxxx
+  lda BALL_POS_L
+  and #%11100000
+  bne checkBallBottom
+
+  lda #BALL_DIR_POS_VAL ; go down
+  sta BALL_DIR_VER
+  rts
+checkBallBottom:
+  ; bottom row high byte is always %00000101
+  lda BALL_POS_H
+  cmp #%00000101
+  bne checkP1Collision
+  
+  ; low byte is always %111xxxxx
+  lda BALL_POS_L
+  and #%11100000
+  cmp #%11100000
+  bne checkP1Collision
+
+  lda #BALL_DIR_NEG_VAL
+  sta BALL_DIR_VER
+  rts
+
 checkP1Collision:
   ; p1 lower byte is always %xxx00001 (column 01)
   lda BALL_POS_L
@@ -287,7 +316,9 @@ checkP1Bottom:
 
   jmp checkP2Collision
 collideP1:
-  jsr setupBall
+  ; move the ball right
+  lda #BALL_DIR_POS_VAL
+  sta BALL_DIR_HOR
   rts
 
 checkP2Collision:
@@ -320,7 +351,9 @@ checkP2Bottom:
   bcs collideP2
   rts
 collideP2:
-  jsr setupBall
+  ; move the ball left
+  lda #BALL_DIR_NEG_VAL
+  sta BALL_DIR_HOR
   rts
 p2Return:
   rts
