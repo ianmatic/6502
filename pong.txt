@@ -7,6 +7,8 @@ BALL_DIR_HOR = $08
 BALL_DIR_VER = $09
 BALL_DIR_NEG_VAL = $00
 BALL_DIR_POS_VAL = $01
+BALL_DELAY = $06
+BALL_DELAY_VAL = $01
 
 PADDLE_OFFSET = $04 ; paddle drawing offset
 PADDLE_OFFSET_COUNTER = $05 ; paddle offset counter
@@ -116,6 +118,10 @@ setupBall:
   lda $fe ; refresh number
   and #$01
   sta BALL_DIR_VER
+
+  lda #BALL_DELAY_VAL
+  sta BALL_DELAY
+
   rts
 
 loop:
@@ -128,9 +134,9 @@ loop:
   jmp loop
 
 stall:
-  ldx #$ff
+  ldx #$80
 stallInner:
-  nop
+  ; nop
   dex
   bne stallInner
   rts
@@ -176,15 +182,28 @@ checkKKey:
   BNE return
   ldx #MOVEMENT_NONE_VAL
   stx P2_MOVEMENT_FLAG
-return:
   rts
 
+skipBall:
+  dey
+  sty BALL_DELAY
+return:
+  rts
 updateBall:
+
   ; Copy current position into prev position
   ldx BALL_POS_L
   stx BALL_PREV_POS_L
   ldx BALL_POS_H
   stx BALL_PREV_POS_H
+
+  ldy BALL_DELAY
+  cpy #$00
+  bne skipBall
+
+  ; reset ball delay
+  ldy #BALL_DELAY_VAL
+  sty BALL_DELAY
 
   jsr moveBallHorizontal
   jsr moveBallVertical
@@ -375,11 +394,24 @@ updateP1:
   ; move P1 according to flag
   ldx P1_MOVEMENT_FLAG
   CPX #MOVEMENT_UP_VAL
-  BEQ moveP1Up
+  BEQ shouldMoveP1Up
   CPX #MOVEMENT_DOWN_VAL
-  BEQ moveP1Down
+  BEQ shouldMoveP1Down
   rts
 
+shouldMoveP1Up:
+  ; don't move up if at $0201 (very top)
+  lda P1_POSITION_TOP_H
+  cmp #$02
+  bne moveP1Up
+
+  lda P1_POSITION_TOP_L
+  cmp #$01
+  bne moveP1Up
+
+  ldx #MOVEMENT_NONE_VAL
+  stx P1_MOVEMENT_FLAG
+  rts
 moveP1Up:
   sec 
   lda P1_POSITION_TOP_L
@@ -401,6 +433,19 @@ moveP1Up:
   sbc #$00
   sta P1_POSITION_BOTTOM_H
 
+  rts
+shouldMoveP1Down:
+  ; don't move up if at $05e1 (very bottom)
+  lda P1_POSITION_BOTTOM_H
+  cmp #$05
+  bne moveP1Down
+
+  lda P1_POSITION_BOTTOM_L
+  cmp #$e1
+  bne moveP1Down
+
+  ldx #MOVEMENT_NONE_VAL
+  stx P1_MOVEMENT_FLAG
   rts
 moveP1Down:
 
@@ -443,11 +488,24 @@ updateP2:
   ; move P2 according to flag
   ldx P2_MOVEMENT_FLAG
   CPX #MOVEMENT_UP_VAL
-  BEQ moveP2Up
+  BEQ shouldMoveP2Up
   CPX #MOVEMENT_DOWN_VAL
-  BEQ moveP2Down
+  BEQ shouldMoveP2Down
   rts
 
+shouldMoveP2Up:
+  ; don't move up if at $021e (very top)
+  lda P2_POSITION_TOP_H
+  cmp #$02
+  bne moveP2Up
+
+  lda P2_POSITION_TOP_L
+  cmp #$1e
+  bne moveP2Up
+
+  ldx #MOVEMENT_NONE_VAL
+  stx P2_MOVEMENT_FLAG
+  rts
 moveP2Up:
   sec 
   lda P2_POSITION_TOP_L
@@ -469,6 +527,20 @@ moveP2Up:
   sbc #$00
   sta P2_POSITION_BOTTOM_H
 
+  rts
+
+shouldMoveP2Down:
+  ; don't move up if at $05fe (very bottom)
+  lda P2_POSITION_BOTTOM_H
+  cmp #$05
+  bne moveP2Down
+
+  lda P2_POSITION_BOTTOM_L
+  cmp #$fe
+  bne moveP2Down
+
+  ldx #MOVEMENT_NONE_VAL
+  stx P2_MOVEMENT_FLAG
   rts
 moveP2Down:
 
