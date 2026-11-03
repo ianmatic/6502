@@ -3,9 +3,10 @@ BALL_POS_H = $01
 BALL_PREV_POS_L = $02 ; ball's previous position
 BALL_PREV_POS_H = $03
 BALL_COLOR_VAL = $01 ; White
-BALL_DIR = $08
-BALL_DIR_LEFT_VAL = $00
-BALL_DIR_RIGHT_VAL = $01
+BALL_DIR_HOR = $08
+BALL_DIR_VER = $09
+BALL_DIR_NEG_VAL = $00
+BALL_DIR_POS_VAL = $01
 
 PADDLE_OFFSET = $04 ; paddle drawing offset
 PADDLE_OFFSET_COUNTER = $05 ; paddle offset counter
@@ -107,10 +108,14 @@ setupBall:
   lda #$04
   sta BALL_POS_H
 
-  ; go left if random number is even, otherwise right
+  ; go in a random direction, clamped to values $00 and $01
   lda $fe
   and #$01
-  sta BALL_DIR
+  sta BALL_DIR_HOR
+
+  lda $fe ; refresh number
+  and #$01
+  sta BALL_DIR_VER
   rts
 
 loop:
@@ -174,17 +179,6 @@ checkKKey:
 return:
   rts
 
-moveBallLeft:
-  ldx BALL_POS_L
-  dex
-  stx BALL_POS_L
-  jmp checkBallOutOfBounds
-moveBallRight:
-  ldx BALL_POS_L
-  inx
-  stx BALL_POS_L
-  jmp checkBallOutOfBounds
-
 updateBall:
   ; Copy current position into prev position
   ldx BALL_POS_L
@@ -192,10 +186,51 @@ updateBall:
   ldx BALL_POS_H
   stx BALL_PREV_POS_H
 
-  lda BALL_DIR
-  cmp #BALL_DIR_RIGHT_VAL
+  jsr moveBallHorizontal
+  jsr moveBallVertical
+  jmp checkBallOutOfBounds
+
+moveBallHorizontal:
+  lda BALL_DIR_HOR
+  cmp #BALL_DIR_POS_VAL
   beq moveBallRight
   jmp moveBallLeft
+moveBallLeft:
+  ldx BALL_POS_L
+  dex
+  stx BALL_POS_L
+  rts
+moveBallRight:
+  ldx BALL_POS_L
+  inx
+  stx BALL_POS_L
+  rts
+
+moveBallVertical:
+  lda BALL_DIR_VER
+  cmp #BALL_DIR_POS_VAL
+  beq moveBallDown
+  jmp moveBallUp
+moveBallUp:
+  sec
+  lda BALL_POS_L
+  sbc #$20
+  sta BALL_POS_L
+
+  lda BALL_POS_H
+  sbc #$00
+  sta BALL_POS_H
+  rts
+moveBallDown:
+  clc
+  lda BALL_POS_L
+  adc #$20
+  sta BALL_POS_L
+
+  lda BALL_POS_H
+  adc #$00
+  sta BALL_POS_H
+  rts
 
 checkBallOutOfBounds:
   ; rightmost edge lower byte is always %xxx11111, so if the last 5 bits are set then we are at right edge
@@ -260,23 +295,23 @@ checkP2Collision:
   lda BALL_POS_L
   and #%00011111 ; ignore first 3 bits as they are row info
   cmp #%00011110
-  bne return
+  bne p2Return
 
   lda BALL_POS_H
   cmp P2_POSITION_TOP_H    
-  bcc return
+  bcc p2Return
   bne checkP2Bottom ; ball is below top
 
   ; Higher byte matches, check lower byte
   lda BALL_POS_L
   cmp P2_POSITION_TOP_L
   bcs checkP2Bottom
-  jmp return ; ball is at or below top
+  jmp p2Return ; ball is at or below top
   rts
 checkP2Bottom:
   lda P2_POSITION_BOTTOM_H
   cmp BALL_POS_H
-  bcc return
+  bcc p2Return
   bne collideP2
 
   ; Higher byte matches, check lower byte
@@ -286,6 +321,8 @@ checkP2Bottom:
   rts
 collideP2:
   jsr setupBall
+  rts
+p2Return:
   rts
 
 updateP1:
